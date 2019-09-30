@@ -1,0 +1,109 @@
+pragma solidity ^0.4.17;
+
+interface DubCoin {
+    function transfer(address receiver, uint amount);
+}
+
+contract DubICOcontract {
+    
+    address public beneficiary;
+    uint public totalAmountRaised;
+    uint public fundingGoal;
+    uint public crowdSaleDeadline;
+    uint public tokenPrice;
+    DubCoin public token;
+    mapping(address => uint) public balanceOf;
+    bool fundingGoalReached = false;
+    bool crowdSaleClosed = false;
+
+    /**
+     * Constructor
+     * ifSuccessfulSendTo: Address where funds should be sent if sale reaches target
+     * goalInEther: What is the target goal for the crowdsale in ethers.
+     * durationInMinutes: How long will the crowdsale be running.
+     * tokenPriceInEther: How much does each token cost
+     * addressOfToken: Where is the token contract deployed.
+     */
+    function Crowdsale(
+        // address ifSuccessfulSendTo = 0x0B08d49019e8823Aa4ae64DA58af006c9e599bb5,
+        // uint goalInEther = 4,
+        // uint durationInMinutes = 1440,
+        // uint tokenPriceInEther = 1,
+        // address addressOfToken = 0x2d2810df66d4681140acbad7a3d36dfdf90b12d2
+    ) {
+        beneficiary = 0x0B08d49019e8823Aa4ae64DA58af006c9e599bb5;
+        fundingGoal = 4;
+        crowdSaleDeadline = now + 1440 * 1 minutes;
+        tokenPrice = 1 * 1 ether;
+        token = DubCoin(0x2d2810df66d4681140acbad7a3d36dfdf90b12d2);
+    }
+
+    /**
+     * Fallback function
+     *
+     * Default function which gets called when someone sends money to the contract. Will be used for joining sale.
+     */
+    function () payable {
+        // if(!crowdSaleClosed){
+        //     uint amount = msg.value;
+        //     balanceOf[msg.sender] += amount;
+        //     totalAmountRaised += amount;
+        //     token.transfer(msg.sender, amount/tokenPrice);
+        // }
+        
+        require(!crowdSaleClosed);
+        uint amount = msg.value;
+        balanceOf[msg.sender] += amount;
+        totalAmountRaised += amount;
+        token.transfer(msg.sender, amount/tokenPrice);
+    }
+
+    function getLeftTokens() public returns(uint) {
+        return address(this).balance;
+    }
+
+    /**
+     * Modifier used to check if deadline for crowdsale has passed
+     */
+    modifier afterDeadline() {
+        if(now >= crowdSaleDeadline){
+            crowdSaleClosed = true;
+            _;
+        }
+    }
+
+    /**
+     * Check if the funding goal was reached. Will only be checked if afterDeadline modifier above is true.
+     *
+     */
+    function checkGoalReached() afterDeadline {
+        if(totalAmountRaised >= fundingGoal){
+            fundingGoalReached = true;
+        }
+    }
+
+
+    /**
+     * Withdraw the funds
+     *
+     * Will withdraw the money after the deadline has been reached. If the goal was reached, only the owner can withdraw money to the beneficiary account.
+     * If you goal was not reached, everyone who participated can withdraw their share.
+     */
+    function safeWithdrawal() afterDeadline {
+        if(!fundingGoalReached){
+            uint amount = balanceOf[msg.sender];
+            balanceOf[msg.sender] = 0;
+            if(amount > 0){
+                if(!msg.sender.send(amount)){
+                    balanceOf[msg.sender] = amount;
+                }
+            }
+        }
+        if(fundingGoalReached && msg.sender == beneficiary){
+            if(!beneficiary.send(totalAmountRaised)){
+                fundingGoalReached = false;
+            }
+            
+        }
+    }
+}
